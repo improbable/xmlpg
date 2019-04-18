@@ -654,6 +654,20 @@ public class Xmlpg
                     }
                 }
             }
+
+            if(qName.compareToIgnoreCase("list") == 0) {
+                for (int idx = 0; idx < attributes.getLength(); idx++) {
+                    if (attributes.getQName(idx).equalsIgnoreCase("type")) {
+                        String type = attributes.getValue(idx);
+                        if (type.equalsIgnoreCase("fixed")) {
+                            qName = "fixedlist";
+                        } else if (type.equalsIgnoreCase("variable")) {
+                            qName = "variablelist";
+                        }
+                        break;
+                    }
+                }
+            }
             
             // A variable lenght list attribute (a list of some sort).
             if(qName.compareToIgnoreCase("variablelist") == 0)

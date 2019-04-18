@@ -8,6 +8,8 @@ public class SchemaGenerator extends Generator
     /** Maps the primitive types listed in the XML file to the schema types */
     Properties types = new Properties();
 
+    Properties aliases = new Properties();
+
     /** A property list that contains schema-specific code generation information, such
      * as package names, includes, etc.
      */
@@ -56,6 +58,26 @@ public class SchemaGenerator extends Generator
 
         types.setProperty("double", "double");
         types.setProperty("float", "float");
+
+        // Alias these types out of existence.
+        aliases.setProperty("OneByteChunk", "byte");
+        aliases.setProperty("TwoByteChunk", "uint32");
+        aliases.setProperty("FourByteChunk", "uint32");
+        aliases.setProperty("EightByteChunk", "uint64");
+    }
+
+    public String getType(String in) {
+        String rv = aliases.getProperty(in);
+        if (rv != null) {
+            in = rv;
+        }
+
+        rv = types.getProperty(in);
+        if (rv == null) {
+            rv = in;
+        }
+
+        return rv;
     }
 
     /**
@@ -91,6 +113,9 @@ public class SchemaGenerator extends Generator
      */
     public void writeSchemaFile(GeneratedClass aClass)
     {
+        if (aliases.getProperty(aClass.getName()) != null)
+            return;
+
         try
         {
             String name = aClass.getName();
@@ -103,6 +128,9 @@ public class SchemaGenerator extends Generator
             // Write includes for any classes we may reference. this generates multiple #includes if we
             // use a class multiple times, but that's innocuous. We could sort and do a unqiue to prevent
             // this if so inclined.
+
+            pw.println("// Copyright (c) Improbable Worlds Ltd, All Rights Reserved");
+            pw.println();
 
             String namespace = languageProperties.getProperty("namespace");
             // Print out namespace, if any
@@ -120,6 +148,9 @@ public class SchemaGenerator extends Generator
                 ClassAttribute anAttribute = (ClassAttribute)aClass.getClassAttributes().get(idx);
 
                 if (attribs.contains(anAttribute.getType()))
+                    continue;
+
+                if (aliases.getProperty(anAttribute.getType()) != null)
                     continue;
 
                 // If this attribute is a class, we need to do an import on that class
@@ -140,6 +171,7 @@ public class SchemaGenerator extends Generator
 
             // if we inherit from another class we need to do an include on it
             if (!aClass.getParentClass().isEmpty() &&
+                    aliases.getProperty(aClass.getParentClass()) == null &&
                     !aClass.getParentClass().equalsIgnoreCase("root") &&
                     !aClass.getParentClass().equalsIgnoreCase("Pdu")) {
                 pw.println("import \"" + namespace + aClass.getParentClass() + ".schema\";");
@@ -152,15 +184,6 @@ public class SchemaGenerator extends Generator
             {
                 pw.println("// " + aClass.getClassComments() );
             }
-
-            /*
-            pw.println();
-            pw.println("// Copyright (c) 2007-2012, MOVES Institute, Naval Postgraduate School. All rights reserved. ");
-            pw.println("// Licensed under the BSD open source license. See http://www.movesinstitute.org/licenses/bsd.html");
-            pw.println("//");
-            pw.println("// @author DMcG, jkg");
-            pw.println();
-            */
 
             int pdu = 0;
             for(int idx = 0; idx < aClass.getInitialValues().size(); idx++) {
@@ -182,10 +205,12 @@ public class SchemaGenerator extends Generator
                 pw.println("type " + aClass.getName() + " {");
             }
 
+            GeneratedClass parent = null;
             int id = 1;
             if (!aClass.getParentClass().isEmpty() &&
                 !aClass.getParentClass().equalsIgnoreCase("root") &&
                 !aClass.getParentClass().equalsIgnoreCase("Pdu")) {
+                //parent = (GeneratedClass) classDescriptions.get(aClass.getParentClass());
                 pw.println("  " + "/** Schema does not support inheritance, this is as close as we can get. */");
                 pw.println("  " + aClass.getParentClass() + " super = " + id + ";");
                 pw.println();
@@ -196,48 +221,40 @@ public class SchemaGenerator extends Generator
             {
                 ClassAttribute anAttribute = (ClassAttribute)aClass.getClassAttributes().get(idx);
 
+                if (anAttribute.getName().startsWith("pad") || anAttribute.getName().endsWith("Padding"))
+                    continue;
+
                 if (idx > 0)
                     pw.println();
 
-                if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.PRIMITIVE)
+                if(anAttribute.getComment() != null)
+                    pw.println("  " + "/** " + anAttribute.getComment() + " */");
+
+                String type = getType(anAttribute.getType());
+                if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.PRIMITIVE ||
+                   anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.CLASSREF)
                 {
-                    if(anAttribute.getComment() != null)
-                        pw.println("  " + "/** " + anAttribute.getComment() + " */");
-
-                    pw.println("  " + types.get(anAttribute.getType()) + " " + makeSnakeCase(anAttribute.getName()) + " = " + (id) + ";");
-
+                    pw.println("  " + type + " " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
                 }
 
-                if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.CLASSREF)
+                else if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.FIXED_LIST ||
+                        anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST)
                 {
-                    if(anAttribute.getComment() != null)
-                        pw.println("  " + "/** " + anAttribute.getComment() + " */");
-
-                    pw.println("  " + anAttribute.getType() + " " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
-                }
-
-                if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.FIXED_LIST)
-                {
-                    if(anAttribute.getComment() != null)
-                        pw.println("  " + "/** " + anAttribute.getComment() + " */");
-
-                    pw.println("  list<" + types.get(anAttribute.getType()) + "> " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
-                }
-
-                if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST)
-                {
-                    if(anAttribute.getComment() != null)
-                        pw.println("  " + "/** " + anAttribute.getComment() + " */");
-
-                    pw.println("  list<" + anAttribute.getType() + "> " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
+                    String alias = aliases.getProperty(anAttribute.getType());
+                    if ((alias != null && (alias.equals("byte") || alias.equals("unsigned byte"))) ||
+                        anAttribute.getType().equals("byte") || anAttribute.getType().equals("unsigned byte")) {
+                        if (anAttribute.getCouldBeString())
+                            pw.println("  string " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
+                        else
+                            pw.println("  bytes " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
+                    } else {
+                        pw.println("  list<" + type + "> " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
+                    }
                 }
             }
 
 
             pw.println("}");
-            pw.println();
-
-            this.writeLicenseNotice(pw);
 
             pw.flush();
             pw.close();
@@ -251,41 +268,5 @@ public class SchemaGenerator extends Generator
 
     static final String makeSnakeCase(String in) {
         return in.replaceAll("(.)(\\p{Upper})", "$1_$2").toLowerCase();
-    }
-
-    private void writeLicenseNotice(PrintWriter pw)
-    {
-        pw.println("// Copyright (c) 1995-2009 held by the author(s).  All rights reserved.");
-
-        pw.println("// Redistribution and use in source and binary forms, with or without");
-        pw.println("// modification, are permitted provided that the following conditions");
-        pw.println("//  are met:");
-        pw.println("// ");
-        pw.println("//  * Redistributions of source code must retain the above copyright");
-        pw.println("// notice, this list of conditions and the following disclaimer.");
-        pw.println("// * Redistributions in binary form must reproduce the above copyright");
-        pw.println("// notice, this list of conditions and the following disclaimer");
-        pw.println("// in the documentation and/or other materials provided with the");
-        pw.println("// distribution.");
-        pw.println("// * Neither the names of the Naval Postgraduate School (NPS)");
-        pw.println("//  Modeling Virtual Environments and Simulation (MOVES) Institute");
-        pw.println("// (http://www.nps.edu and http://www.MovesInstitute.org)");
-        pw.println("// nor the names of its contributors may be used to endorse or");
-        pw.println("//  promote products derived from this software without specific");
-        pw.println("// prior written permission.");
-        pw.println("// ");
-        pw.println("// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS");
-        pw.println("// AS IS AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT");
-        pw.println("// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS");
-        pw.println("// FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE");
-        pw.println("// COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,");
-        pw.println("// INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,");
-        pw.println("// BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;");
-        pw.println("// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER");
-        pw.println("// CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT");
-        pw.println("// LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN");
-        pw.println("// ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE");
-        pw.println("// POSSIBILITY OF SUCH DAMAGE.");
-
     }
 }
