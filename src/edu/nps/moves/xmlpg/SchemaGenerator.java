@@ -126,13 +126,16 @@ public class SchemaGenerator extends Generator
                 namespace = "";
             }
 
+            boolean isEvent = false;
+
             Set attribs = new HashSet<String>();
             for(int i = 0; i < aClass.getClassAttributes().size(); i++) {
-                ClassAttribute anAttribute = (ClassAttribute)aClass.getClassAttributes().get(i);
+                ClassAttribute anAttribute = (ClassAttribute) aClass.getClassAttributes().get(i);
 
                 if (attribs.contains(anAttribute.getType()))
                     continue;
 
+                // Aliased types are converted in Schema primatives
                 if (aliases.getProperty(anAttribute.getType()) != null)
                     continue;
 
@@ -144,6 +147,9 @@ public class SchemaGenerator extends Generator
                 // do an import on the class that is in the list.
                 if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST)
                     pw.println("import \"" + namespace + anAttribute.getType() + ".schema\";");
+
+                if(anAttribute.getType().contains("EventIdentifier"))
+                    isEvent = true;
 
                 attribs.add(anAttribute.getType());
             }
@@ -178,9 +184,20 @@ public class SchemaGenerator extends Generator
             }
 
             if (pdu > 0) {
-                pw.println("component " + aClass.getName() + " {");
-                pw.println("  id = " + pdu + ";");
-                pw.println();
+                if (isEvent) {
+                    pw.println("component " + aClass.getName() + "Event {");
+                    pw.println("  id = " + pdu + ";");
+                    pw.println();
+                    pw.println("  event " + aClass.getName() + " " + makeSnakeCase(aClass.getName()) + ";");
+                    pw.println("}");
+                    pw.println();
+                    pw.println("type " + aClass.getName() + " {");
+                }
+                else {
+                    pw.println("component " + aClass.getName() + " {");
+                    pw.println("  id = " + pdu + ";");
+                    pw.println();
+                }
             } else {
                 pw.println("type " + aClass.getName() + " {");
             }
