@@ -22,15 +22,13 @@ public class SchemaGenerator extends Generator
         Properties systemProperties = System.getProperties();
         String clPduOffset = systemProperties.getProperty("xmlpg.pduOffset");
 
-        String directory = null;
         String clDirectory = systemProperties.getProperty("xmlpg.generatedSourceDir");
 
         try {
             if(clPduOffset != null && Integer.parseInt(clPduOffset) > 0)
                 pSchemaProperties.setProperty("pduOffset", clPduOffset);
         }
-        catch(NumberFormatException e)
-        {
+        catch(NumberFormatException e) {
             System.out.println("PDU offset is not an integer. Modify the XML file to fix value.");
             System.out.println(e);
             System.exit(-1);
@@ -68,14 +66,12 @@ public class SchemaGenerator extends Generator
 
     public String getType(String in) {
         String rv = aliases.getProperty(in);
-        if (rv != null) {
+        if (rv != null)
             in = rv;
-        }
 
         rv = types.getProperty(in);
-        if (rv == null) {
+        if (rv == null)
             rv = in;
-        }
 
         return rv;
     }
@@ -83,29 +79,19 @@ public class SchemaGenerator extends Generator
     /**
      * Generates the schema source code classes
      */
-    public void writeClasses()
-    {
+    public void writeClasses() {
         this.createDirectory();
 
         Iterator it = classDescriptions.values().iterator();
 
-        // Loop through all the class descriptions, generating a header file and schema file for each.
-        while(it.hasNext())
-        {
-            try
-            {
-                GeneratedClass aClass = (GeneratedClass)it.next();
-                // System.out.println("Generating class " + aClass.getName());
-                this.writeSchemaFile(aClass);
-                // this.writeSchemaFile(aClass);
+        while(it.hasNext()) {
+            try {
+                this.writeSchemaFile((GeneratedClass)it.next());
             }
-            catch(Exception e)
-            {
+            catch(Exception e) {
                 System.out.println("error creating source code " + e);
             }
-
-        } // End while
-
+        }
     }
 
     /**
@@ -116,10 +102,8 @@ public class SchemaGenerator extends Generator
         if (aliases.getProperty(aClass.getName()) != null)
             return;
 
-        try
-        {
+        try {
             String name = aClass.getName();
-            //System.out.println("Creating schema source code files for " + name);
             String headerFullPath = getDirectory() + "/" + name + ".schema";
             File outputFile = new File(headerFullPath);
             outputFile.createNewFile();
@@ -134,18 +118,17 @@ public class SchemaGenerator extends Generator
 
             String namespace = languageProperties.getProperty("namespace");
             // Print out namespace, if any
-            if(namespace != null)
-            {
+            if(namespace != null) {
                 pw.println("package " + namespace.toLowerCase() + ";");
                 namespace = namespace + "/";
             }
-            else
+            else {
                 namespace = "";
+            }
 
             Set attribs = new HashSet<String>();
-            for(int idx = 0; idx < aClass.getClassAttributes().size(); idx++)
-            {
-                ClassAttribute anAttribute = (ClassAttribute)aClass.getClassAttributes().get(idx);
+            for(int i = 0; i < aClass.getClassAttributes().size(); i++) {
+                ClassAttribute anAttribute = (ClassAttribute)aClass.getClassAttributes().get(i);
 
                 if (attribs.contains(anAttribute.getType()))
                     continue;
@@ -155,16 +138,12 @@ public class SchemaGenerator extends Generator
 
                 // If this attribute is a class, we need to do an import on that class
                 if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.CLASSREF)
-                {
                     pw.println("import \"" + namespace + anAttribute.getType() + ".schema\";");
-                }
 
                 // if this attribute is a variable-length list that holds a class, we need to
                 // do an import on the class that is in the list.
                 if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST)
-                {
                     pw.println("import \"" + namespace + anAttribute.getType() + ".schema\";");
-                }
 
                 attribs.add(anAttribute.getType());
             }
@@ -181,17 +160,16 @@ public class SchemaGenerator extends Generator
 
             // Print out the class comments, if any
             if(aClass.getClassComments() != null)
-            {
-                pw.println("// " + aClass.getClassComments() );
-            }
+                pw.println("// " + aClass.getClassComments());
 
             int pdu = 0;
-            for(int idx = 0; idx < aClass.getInitialValues().size(); idx++) {
-                InitialValue aValue = (InitialValue)aClass.getInitialValues().get(idx);
+            for(int i = 0; i < aClass.getInitialValues().size(); i++) {
+                InitialValue aValue = (InitialValue)aClass.getInitialValues().get(i);
 
                 if (aValue.getVariable().equalsIgnoreCase("pduType")) {
                     pdu = Integer.parseInt(aValue.getVariableValue());
                     String pduOffset = languageProperties.getProperty("pduOffset");
+
                     if (pduOffset != null)
                         pdu += Integer.parseInt(pduOffset);
                     if(aClass.getName().equalsIgnoreCase("FastEntityStatePdu"))
@@ -212,21 +190,19 @@ public class SchemaGenerator extends Generator
             if (!aClass.getParentClass().isEmpty() &&
                 !aClass.getParentClass().equalsIgnoreCase("root") &&
                 !aClass.getParentClass().equalsIgnoreCase("Pdu")) {
-                //parent = (GeneratedClass) classDescriptions.get(aClass.getParentClass());
                 pw.println("  " + "/** Schema does not support inheritance, this is as close as we can get. */");
                 pw.println("  " + aClass.getParentClass() + " super = " + id + ";");
                 pw.println();
                 id++;
             }
 
-            for(int idx = 0; idx < aClass.getClassAttributes().size(); idx++, id++)
-            {
-                ClassAttribute anAttribute = (ClassAttribute)aClass.getClassAttributes().get(idx);
+            for(int i = 0; i < aClass.getClassAttributes().size(); i++, id++) {
+                ClassAttribute anAttribute = (ClassAttribute)aClass.getClassAttributes().get(i);
 
-                if (anAttribute.getName().startsWith("pad") || anAttribute.getName().endsWith("Padding"))
+                if(anAttribute.getName().startsWith("pad") || anAttribute.getName().endsWith("Padding"))
                     continue;
 
-                if (idx > 0)
+                if(i > 0)
                     pw.println();
 
                 if(anAttribute.getComment() != null)
@@ -234,14 +210,11 @@ public class SchemaGenerator extends Generator
 
                 String type = getType(anAttribute.getType());
                 if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.PRIMITIVE ||
-                   anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.CLASSREF)
-                {
+                   anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.CLASSREF) {
                     pw.println("  " + type + " " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
                 }
-
                 else if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.FIXED_LIST ||
-                        anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST)
-                {
+                        anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST) {
                     String alias = aliases.getProperty(anAttribute.getType());
                     if ((alias != null && (alias.equals("byte") || alias.equals("unsigned byte"))) ||
                         anAttribute.getType().equals("byte") || anAttribute.getType().equals("unsigned byte")) {
@@ -255,18 +228,16 @@ public class SchemaGenerator extends Generator
                 }
             }
 
-
             pw.println("}");
 
             pw.flush();
             pw.close();
-        } // End of try
+        }
         catch(Exception e)
         {
             System.out.println(e);
         }
-
-    } // End write header file
+    }
 
     static final String makeSnakeCase(String in) {
         return in.replaceAll("(.)(\\p{Upper})", "$1_$2").toLowerCase();
