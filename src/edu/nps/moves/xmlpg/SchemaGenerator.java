@@ -44,18 +44,18 @@ public class SchemaGenerator extends Generator
         // in the java file, specifically the data types. This could be externalized to
         // a properties file, but there's only a dozen or so and an external props file
         // would just add some complexity.
-        types.setProperty("unsigned short", "uint32");
-        types.setProperty("unsigned byte", "uint32");
-        types.setProperty("unsigned int", "uint32");
-        types.setProperty("unsigned long", "uint64");
+        types.setProperty("unsigned short", "option<uint32>");
+        types.setProperty("unsigned byte", "option<uint32>");
+        types.setProperty("unsigned int", "option<uint32>");
+        types.setProperty("unsigned long", "option<uint64>");
 
-        types.setProperty("byte", "sint32");
-        types.setProperty("short", "sint32");
-        types.setProperty("int", "sint32");
-        types.setProperty("long", "sint64");
+        types.setProperty("byte", "option<sint32>");
+        types.setProperty("short", "option<sint32>");
+        types.setProperty("int", "option<sint32>");
+        types.setProperty("long", "option<sint64>");
 
-        types.setProperty("double", "double");
-        types.setProperty("float", "float");
+        types.setProperty("double", "option<double>");
+        types.setProperty("float", "option<float>");
 
         // Alias these types out of existence.
         aliases.setProperty("OneByteChunk", "byte");
