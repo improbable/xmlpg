@@ -194,6 +194,8 @@ public class SchemaGenerator extends Generator
                     String pduOffset = languageProperties.getProperty("pduOffset");
                     if (pduOffset != null)
                         pdu += Integer.parseInt(pduOffset);
+                    if(aClass.getName().equalsIgnoreCase("FastEntityStatePdu"))
+                        pdu += 70;
                 }
             }
 
