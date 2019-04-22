@@ -236,8 +236,9 @@ public class SchemaGenerator extends Generator
                 else if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.FIXED_LIST ||
                         anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST) {
                     String alias = aliases.getProperty(anAttribute.getType());
-                    if ((alias != null && (alias.equals("byte") || alias.equals("unsigned byte"))) ||
-                        anAttribute.getType().equals("byte") || anAttribute.getType().equals("unsigned byte")) {
+                    if (alias == null)
+                        alias = anAttribute.getType();
+                    if (alias.equals("byte") || alias.equals("unsigned byte")) {
                         if (anAttribute.getCouldBeString())
                             pw.println("  option<string> " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
                         else
