@@ -1,5 +1,7 @@
 package edu.nps.moves.xmlpg;
 
+import javafx.util.Pair;
+
 import java.io.*;
 import java.util.*;
 
@@ -44,18 +46,18 @@ public class SchemaGenerator extends Generator
         // in the java file, specifically the data types. This could be externalized to
         // a properties file, but there's only a dozen or so and an external props file
         // would just add some complexity.
-        types.setProperty("unsigned short", "option<uint32>");
-        types.setProperty("unsigned byte", "option<uint32>");
-        types.setProperty("unsigned int", "option<uint32>");
-        types.setProperty("unsigned long", "option<uint64>");
+        types.setProperty("unsigned short", "uint32");
+        types.setProperty("unsigned byte", "uint32");
+        types.setProperty("unsigned int", "uint32");
+        types.setProperty("unsigned long", "uint64");
 
-        types.setProperty("byte", "option<sint32>");
-        types.setProperty("short", "option<sint32>");
-        types.setProperty("int", "option<sint32>");
-        types.setProperty("long", "option<sint64>");
+        types.setProperty("byte", "sint32");
+        types.setProperty("short", "sint32");
+        types.setProperty("int", "sint32");
+        types.setProperty("long", "sint64");
 
-        types.setProperty("double", "option<double>");
-        types.setProperty("float", "option<float>");
+        types.setProperty("double", "double");
+        types.setProperty("float", "float");
 
         // Alias these types out of existence.
         aliases.setProperty("OneByteChunk", "byte");
@@ -166,7 +168,7 @@ public class SchemaGenerator extends Generator
 
             // Print out the class comments, if any
             if(aClass.getClassComments() != null)
-                pw.println("// " + aClass.getClassComments());
+                pw.println("// " + trimAllWhitespace(aClass.getClassComments()));
 
             int pdu = 0;
             for(int i = 0; i < aClass.getInitialValues().size(); i++) {
@@ -208,11 +210,12 @@ public class SchemaGenerator extends Generator
                 !aClass.getParentClass().equalsIgnoreCase("root") &&
                 !aClass.getParentClass().equalsIgnoreCase("Pdu")) {
                 pw.println("  " + "/** Schema does not support inheritance, this is as close as we can get. */");
-                pw.println("  " + aClass.getParentClass() + " super = " + id + ";");
+                pw.println("  option<" + aClass.getParentClass() + "> super = " + id + ";");
                 pw.println();
                 id++;
             }
 
+            LinkedList<InternalType> listTypes = new LinkedList<InternalType>();
             for(int i = 0; i < aClass.getClassAttributes().size(); i++, id++) {
                 ClassAttribute anAttribute = (ClassAttribute)aClass.getClassAttributes().get(i);
 
@@ -223,12 +226,12 @@ public class SchemaGenerator extends Generator
                     pw.println();
 
                 if(anAttribute.getComment() != null)
-                    pw.println("  " + "/** " + anAttribute.getComment() + " */");
+                    pw.println("  " + "/** " + trimAllWhitespace(anAttribute.getComment()) + " */");
 
                 String type = getType(anAttribute.getType());
                 if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.PRIMITIVE ||
                    anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.CLASSREF) {
-                    pw.println("  " + type + " " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
+                    pw.println("  option<" + type + "> " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
                 }
                 else if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.FIXED_LIST ||
                         anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST) {
@@ -236,16 +239,29 @@ public class SchemaGenerator extends Generator
                     if ((alias != null && (alias.equals("byte") || alias.equals("unsigned byte"))) ||
                         anAttribute.getType().equals("byte") || anAttribute.getType().equals("unsigned byte")) {
                         if (anAttribute.getCouldBeString())
-                            pw.println("  string " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
+                            pw.println("  option<string> " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
                         else
-                            pw.println("  bytes " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
+                            pw.println("  option<bytes> " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
                     } else {
-                        pw.println("  list<" + type + "> " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
+                        String prependClass = aClass.getName().replaceAll("Pdu$", "");
+
+                        InternalType internalType = new InternalType(prependClass + makeFirstLetterUpper(anAttribute.getName()) + "List", type, makeSnakeCase(anAttribute.getName()));
+
+                        pw.println("  option<" + internalType.schemaType + "> " + makeSnakeCase(anAttribute.getName()) + "_list = " + id + ";");
+
+                        listTypes.add(internalType);
                     }
                 }
             }
 
             pw.println("}");
+
+            for(InternalType type : listTypes) {
+                pw.println();
+                pw.println("type " + type.schemaType + " {");
+                pw.println("  list<" + type.listDataType + "> " + type.variableName + " = 1;");
+                pw.println("}");
+            }
 
             pw.flush();
             pw.close();
@@ -256,7 +272,27 @@ public class SchemaGenerator extends Generator
         }
     }
 
+    private class InternalType {
+        public String schemaType;
+        public String listDataType;
+        public String variableName;
+
+        public InternalType(String schemaType, String listDataType, String variableName) {
+            this.schemaType = schemaType;
+            this.listDataType = listDataType;
+            this.variableName = variableName;
+        }
+    }
+
+    static final String trimAllWhitespace(String in) {
+        return in.replaceAll("\\s+", " ");
+    }
+
     static final String makeSnakeCase(String in) {
         return in.replaceAll("(.)(\\p{Upper})", "$1_$2").toLowerCase();
+    }
+
+    static final String makeFirstLetterUpper(String in) {
+        return in.substring(0, 1).toUpperCase() + in.substring(1);
     }
 }
