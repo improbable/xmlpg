@@ -23,7 +23,7 @@
 
     <target name="compile" depends="init" description="Compile code">
         <javac srcdir="${src}" destdir="${build}"
-               source="1.5" target="1.5"
+               source="8" target="8"
                includeAntRuntime="no"
                classpathref="lib.path" debug="${compile.debug}">
         </javac>

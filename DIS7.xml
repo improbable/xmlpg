@@ -43,6 +43,9 @@
 
 <schema namespace="DIS"
         directory="schema/DIS"
+        typeOverrideFile="type_override.properties"
+        commandFile="command.properties"
+        apiOverrideFile="api_override.properties"
         pduOffset="1000" />
 
 <javascript namespace="dis" directory="javascript"/>

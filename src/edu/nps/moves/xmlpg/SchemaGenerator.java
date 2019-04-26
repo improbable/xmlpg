@@ -10,12 +10,9 @@ public class SchemaGenerator extends Generator
     /** Maps the primitive types listed in the XML file to the schema types */
     Properties types = new Properties();
 
-    Properties aliases = new Properties();
-
-    /** A property list that contains schema-specific code generation information, such
-     * as package names, includes, etc.
-     */
-    Properties schemaProperties;
+    Properties typeOverrides = new Properties();
+    Properties commands = new Properties();
+    Properties apiOverrides = new Properties();
 
     public SchemaGenerator(HashMap pClassDescriptions, Properties pSchemaProperties)
     {
@@ -23,8 +20,6 @@ public class SchemaGenerator extends Generator
 
         Properties systemProperties = System.getProperties();
         String clPduOffset = systemProperties.getProperty("xmlpg.pduOffset");
-
-        String clDirectory = systemProperties.getProperty("xmlpg.generatedSourceDir");
 
         try {
             if(clPduOffset != null && Integer.parseInt(clPduOffset) > 0)
@@ -36,11 +31,49 @@ public class SchemaGenerator extends Generator
             System.exit(-1);
         }
 
+        String clDirectory = systemProperties.getProperty("xmlpg.generatedSourceDir");
+
         // Directory to place generated source code
         if(clDirectory != null)
             pSchemaProperties.setProperty("directory", clDirectory);
 
         super.setDirectory(pSchemaProperties.getProperty("directory"));
+
+        String clTypeOverrideFile = systemProperties.getProperty("xmlpg.typeOverrideFile");
+        if(clTypeOverrideFile != null)
+            pSchemaProperties.setProperty("typeOverrideFile", clTypeOverrideFile);
+
+        if (pSchemaProperties.getProperty("typeOverrideFile") != null) {
+            try (InputStream input = new FileInputStream(pSchemaProperties.getProperty("typeOverrideFile"))) {
+                typeOverrides.load(input);
+            } catch (IOException e) {
+                System.out.println("Could not load type override file " + pSchemaProperties.getProperty("typeOverrideFile"));
+            }
+        }
+
+        String clCommandFile = systemProperties.getProperty("xmlpg.commandFile");
+        if(clCommandFile != null)
+            pSchemaProperties.setProperty("commandFile", clCommandFile);
+
+        if (pSchemaProperties.getProperty("commandFile") != null) {
+            try (InputStream input = new FileInputStream(pSchemaProperties.getProperty("commandFile"))) {
+                commands.load(input);
+            } catch (IOException e) {
+                System.out.println("Could not load command file " + pSchemaProperties.getProperty("commandFile"));
+            }
+        }
+
+        String clApiOverrideFile = systemProperties.getProperty("xmlpg.apiOverrideFile");
+        if(clApiOverrideFile != null)
+            pSchemaProperties.setProperty("apiOverrideFile", clApiOverrideFile);
+
+        if (pSchemaProperties.getProperty("apiOverrideFile") != null) {
+            try (InputStream input = new FileInputStream(pSchemaProperties.getProperty("apiOverrideFile"))) {
+                apiOverrides.load(input);
+            } catch (IOException e) {
+                System.out.println("Could not load API override file " + pSchemaProperties.getProperty("apiOverrideFile"));
+            }
+        }
 
         // Set up a mapping between the strings used in the XML file and the strings used
         // in the java file, specifically the data types. This could be externalized to
@@ -58,16 +91,10 @@ public class SchemaGenerator extends Generator
 
         types.setProperty("double", "double");
         types.setProperty("float", "float");
-
-        // Alias these types out of existence.
-        aliases.setProperty("OneByteChunk", "byte");
-        aliases.setProperty("TwoByteChunk", "uint32");
-        aliases.setProperty("FourByteChunk", "uint32");
-        aliases.setProperty("EightByteChunk", "uint64");
     }
 
     public String getType(String in) {
-        String rv = aliases.getProperty(in);
+        String rv = typeOverrides.getProperty(in);
         if (rv != null)
             in = rv;
 
@@ -101,7 +128,7 @@ public class SchemaGenerator extends Generator
      */
     public void writeSchemaFile(GeneratedClass aClass)
     {
-        if (aliases.getProperty(aClass.getName()) != null)
+        if (typeOverrides.getProperty(aClass.getName()) != null)
             return;
 
         try {
@@ -129,6 +156,7 @@ public class SchemaGenerator extends Generator
             }
 
             boolean isEvent = false;
+            boolean isCommand = false;
 
             Set attribs = new HashSet<String>();
             for(int i = 0; i < aClass.getClassAttributes().size(); i++) {
@@ -138,7 +166,7 @@ public class SchemaGenerator extends Generator
                     continue;
 
                 // Aliased types are converted in Schema primatives
-                if (aliases.getProperty(anAttribute.getType()) != null)
+                if (typeOverrides.getProperty(anAttribute.getType()) != null)
                     continue;
 
                 // If this attribute is a class, we need to do an import on that class
@@ -150,15 +178,19 @@ public class SchemaGenerator extends Generator
                 if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST)
                     pw.println("import \"" + namespace + anAttribute.getType() + ".schema\";");
 
-                if(anAttribute.getType().contains("EventIdentifier"))
+                if(anAttribute.getType().equals("EventIdentifier"))
                     isEvent = true;
+
+                if (anAttribute.getName().equalsIgnoreCase("requestID")) {
+                    isCommand = true;
+                }
 
                 attribs.add(anAttribute.getType());
             }
 
             // if we inherit from another class we need to do an include on it
             if (!aClass.getParentClass().isEmpty() &&
-                    aliases.getProperty(aClass.getParentClass()) == null &&
+                    typeOverrides.getProperty(aClass.getParentClass()) == null &&
                     !aClass.getParentClass().equalsIgnoreCase("root") &&
                     !aClass.getParentClass().equalsIgnoreCase("Pdu")) {
                 pw.println("import \"" + namespace + aClass.getParentClass() + ".schema\";");
@@ -180,8 +212,6 @@ public class SchemaGenerator extends Generator
 
                     if (pduOffset != null)
                         pdu += Integer.parseInt(pduOffset);
-                    if(aClass.getName().equalsIgnoreCase("FastEntityStatePdu"))
-                        pdu += 70;
                 }
             }
 
@@ -194,6 +224,23 @@ public class SchemaGenerator extends Generator
                     pw.println("}");
                     pw.println();
                     pw.println("type " + aClass.getName() + " {");
+                }
+                else if (isCommand) {
+                    String response = commands.getProperty(aClass.getName());
+                    if (response != null) {
+                        pw.println("import \"" + namespace + response + ".schema\";");
+                        pw.println();
+                        pw.println("component " + aClass.getName() + "Command {");
+                        pw.println("  id = " + pdu + ";");
+                        pw.println();
+                        pw.println("  command " + response  + " Exec" + aClass.getName() + "(" + aClass.getName() + ");");
+                        pw.println("}");
+                        pw.println();
+                    }
+
+                    pw.println("type " + aClass.getName() + " {");
+                    pw.println("  // id = " + pdu + ";");
+                    pw.println();
                 }
                 else {
                     pw.println("component " + aClass.getName() + " {");
@@ -228,14 +275,17 @@ public class SchemaGenerator extends Generator
                 if(anAttribute.getComment() != null)
                     pw.println("  " + "/** " + trimAllWhitespace(anAttribute.getComment()) + " */");
 
-                String type = getType(anAttribute.getType());
+
+                String type = typeOverrides.getProperty(aClass.getName() + "." + anAttribute.getName());
+                if (type == null)
+                    type = getType(anAttribute.getType());
                 if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.PRIMITIVE ||
                    anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.CLASSREF) {
                     pw.println("  option<" + type + "> " + makeSnakeCase(anAttribute.getName()) + " = " + id + ";");
                 }
                 else if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.FIXED_LIST ||
                         anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.VARIABLE_LIST) {
-                    String alias = aliases.getProperty(anAttribute.getType());
+                    String alias = typeOverrides.getProperty(anAttribute.getType());
                     if (alias == null)
                         alias = anAttribute.getType();
                     if (alias.equals("byte") || alias.equals("unsigned byte")) {
