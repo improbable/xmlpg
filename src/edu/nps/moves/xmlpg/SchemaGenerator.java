@@ -14,6 +14,8 @@ public class SchemaGenerator extends Generator
     Properties commands = new Properties();
     Properties apiOverrides = new Properties();
 
+    Set emptyClasses = new HashSet();
+
     public SchemaGenerator(HashMap pClassDescriptions, Properties pSchemaProperties)
     {
         super(pClassDescriptions, pSchemaProperties);
@@ -123,6 +125,24 @@ public class SchemaGenerator extends Generator
         }
     }
 
+    public boolean resolveEmpty(GeneratedClass aClass) {
+        if (aClass.getClassAttributes().isEmpty()) {
+            emptyClasses.add(aClass.getName());
+            return true;
+        }
+
+        if (aClass.getParentClass() != null && !aClass.getParentClass().isEmpty() &&
+               !aClass.getParentClass().equalsIgnoreCase("root")) {
+            GeneratedClass gc = (GeneratedClass) classDescriptions.get(aClass.getParentClass());
+            resolveEmpty(gc);
+            if (emptyClasses.contains(aClass.getParentClass())) {
+                aClass.setParentClass(gc.getParentClass());
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Generate a schema file for the classes
      */
@@ -130,6 +150,10 @@ public class SchemaGenerator extends Generator
     {
         if (typeOverrides.getProperty(aClass.getName()) != null)
             return;
+
+        if (resolveEmpty(aClass)) {
+            return;
+        }
 
         try {
             String name = aClass.getName();
