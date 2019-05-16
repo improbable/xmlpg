@@ -113,6 +113,27 @@ public class SchemaGenerator extends Generator
     public void writeClasses() {
         this.createDirectory();
 
+        try {
+            String headerFullPath = getDirectory() + "/Void.schema";
+            File outputFile = new File(headerFullPath);
+            outputFile.createNewFile();
+            PrintWriter pw = new PrintWriter(outputFile);
+            String namespace = languageProperties.getProperty("namespace");
+            if(namespace != null) {
+                pw.println("package " + namespace.toLowerCase() + ";");
+            }
+            pw.println();
+            pw.println("type Void {");
+            pw.println("}");
+
+            pw.flush();
+            pw.close();
+        }
+        catch(Exception e)
+        {
+            System.out.println(e);
+        }
+
         Iterator it = classDescriptions.values().iterator();
 
         while(it.hasNext()) {
@@ -193,6 +214,9 @@ public class SchemaGenerator extends Generator
                 if (typeOverrides.getProperty(anAttribute.getType()) != null)
                     continue;
 
+                if (emptyClasses.contains(anAttribute.getType()))
+                    continue;
+
                 // If this attribute is a class, we need to do an import on that class
                 if(anAttribute.getAttributeKind() == ClassAttribute.ClassAttributeType.CLASSREF)
                     pw.println("import \"" + namespace + anAttribute.getType() + ".schema\";");
@@ -252,12 +276,16 @@ public class SchemaGenerator extends Generator
                 else if (isCommand) {
                     String response = commands.getProperty(aClass.getName());
                     if (response != null) {
+                        if (response.equalsIgnoreCase("void")) {
+                            response = "Void";
+                        }
+
                         pw.println("import \"" + namespace + response + ".schema\";");
                         pw.println();
                         pw.println("component " + aClass.getName() + "Command {");
                         pw.println("  id = " + pdu + ";");
                         pw.println();
-                        pw.println("  command " + response  + " Exec" + aClass.getName() + "(" + aClass.getName() + ");");
+                        pw.println("  command " + response  + " " + makeSnakeCase(aClass.getName()) + "(" + aClass.getName() + ");");
                         pw.println("}");
                         pw.println();
                     }
@@ -289,6 +317,9 @@ public class SchemaGenerator extends Generator
             LinkedList<InternalType> listTypes = new LinkedList<InternalType>();
             for(int i = 0; i < aClass.getClassAttributes().size(); i++, id++) {
                 ClassAttribute anAttribute = (ClassAttribute)aClass.getClassAttributes().get(i);
+
+                if (emptyClasses.contains(anAttribute.getType()))
+                    continue;
 
                 if(anAttribute.getName().startsWith("pad") || anAttribute.getName().endsWith("Padding"))
                     continue;
